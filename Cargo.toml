@@ -1,0 +1,40 @@
+[package]
+
+name = "torrentlearn_kaleidoscope"
+version = "0.0.1"
+authors = ["Edward Clarke <webmobster@gmail.com>"]
+description = "Experimental GP project"
+documentation = "http://blank.blank"
+homepage = "https://github.com/webmobster/torrent-learn_example"
+repository = "https://github.com/webmobster/torrentlearn_kaleidoscope"
+readme = "README.md"
+keywords = ["GP", "Genetic Programming", "Machine Learning", "ML"]
+license = "GPLv3"
+build = "build.rs"
+
+[dependencies]
+rand = "*"
+
+[dependencies.torrentlearn_model]
+path = "../torrentlearn_model"
+
+
+[lib]
+name = "torrentlearn_kaleidoscope"
+
+[build-dependencies]
+semver = "*"
+
+# The development profile, used for `cargo build`
+[profile.dev]
+opt-level = 0  # Controls the --opt-level the compiler builds with
+debug = true   # Controls whether the compiler passes -g or `--cfg ndebug`
+rpath = false  # Controls whether the compiler passes `-C rpath`
+lto = false    # Controls `-C lto` for binaries and staticlibs
+
+# The release profile, used for `cargo build --release`
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
