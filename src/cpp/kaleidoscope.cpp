@@ -22,6 +22,11 @@ extern "C" void* create_jit();
 extern "C" void* create_IRBuilder(void* context_void);
 extern "C" void* initialize_module(void* context_void, void* jit_void);
 extern "C" void* initialize_pass_manager(void* module_void);
+extern "C" void* generate_constant(void* context_void, uint64_t value);
+extern "C" void* test(void* context_void, void* ir_builder_void, uint64_t value);
+extern "C" void* extern_drop_value(void* value_void);
+
+
 
 
 
@@ -32,6 +37,9 @@ void* get_global_context()
 
 void* create_jit()
 {
+    //You will get null pointers if these aren't run and they should only be run
+    //once by my understanding, but as we are only creating the JIT once that
+    //should be fine
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
@@ -74,4 +82,16 @@ void* initialize_pass_manager(void* module_void)
     fpm->doInitialization();
 
     return (void*) fpm;
+}
+
+void* extern_drop_value(void* value_void)
+{
+    Value *value = static_cast<Value*>(value_void);
+    delete value;
+}
+void* generate_constant(void* context_void, uint64_t value)
+{
+    LLVMContext* context = static_cast<LLVMContext*>(context_void);
+    return ConstantInt::get(*context, APInt(64,value));
+
 }

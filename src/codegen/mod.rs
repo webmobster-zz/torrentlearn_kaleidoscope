@@ -8,7 +8,7 @@ use super::parse::Position;
 use super::parse::Position::{ConstPos,VarPos};
 
 
-mod llvminterface;
+pub mod llvminterface;
 
 const position_one:u8=0;
 const position_two:u8=1;
@@ -29,13 +29,13 @@ pub struct LLVMContext
     ir_builder: *mut u8
 }
 
-impl Drop for LLVMContext
+/*impl Drop for LLVMContext
 {
     fn drop(&mut self)
     {
         panic!("unimplemented")
     }
-}
+}*/
 
 
 pub struct LLVMModule
@@ -44,24 +44,24 @@ pub struct LLVMModule
     function_pass_analyzer: *mut u8
 }
 
-impl Drop for LLVMModule
+/*impl Drop for LLVMModule
 {
     fn drop(&mut self)
     {
         panic!("unimplemented")
     }
-}
+}*/
 
+//FIXME: Does this need a drop implementation (how to clean up this value)
 pub struct LLVMValue(*mut u8);
 
-impl Drop for LLVMValue
+/*impl Drop for LLVMValue
 {
     fn drop(&mut self)
     {
         panic!("unimplemented")
     }
-}
-
+}*/
 
 
 impl Codegen for ParseTree
@@ -98,7 +98,7 @@ impl Codegen for Data
     {
         match self
         {
-            &Val(val) => llvminterface::generate_constant(val,context,module),
+            &Val(val) => llvminterface::generate_constant_val(context,val),
             &Pos(ref position) => position.codegen(context,module)
         }
 
@@ -111,10 +111,38 @@ impl Codegen for Position
     {
         match self
         {
-            &ConstPos(val) => llvminterface::generate_constant(val,context,module),
+            &ConstPos(val) => llvminterface::generate_constant_val(context,val),
             &VarPos(val) => llvminterface::load_array_cell(val,context,module)
         }
 
     }
 
+}
+
+#[cfg(test)]
+mod test{
+
+        use super::llvminterface;
+        use super::LLVMContext;
+        use super::LLVMModule;
+        use super::Codegen;
+        use super::super::parse::Data;
+
+        fn startLLVM() -> (LLVMContext,LLVMModule)
+        {
+                let mut context = llvminterface::initializeLLVM();
+                let module = llvminterface::initializeLLVMModule(&mut context);
+                (context,module)
+        }
+        #[test]
+        fn test_value() {
+            let (mut context,mut module) = startLLVM();
+            Data::Val(54).codegen(&mut context,&mut module);
+        }
+        /*
+        #[test]
+        fn test_data() {
+            unimplemented!()
+        }
+        */
 }

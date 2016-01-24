@@ -11,9 +11,13 @@ extern {
         pub fn create_IRBuilder(context: *mut u8) -> *mut u8;
         pub fn initialize_module(context: *mut u8,jit: *mut u8)-> *mut u8;
         pub fn initialize_pass_manager(module: *mut u8)-> *mut u8;
+        pub fn generate_constant(context: *mut u8, val: u64)-> *mut u8;
+        pub fn extern_drop_value(value: *mut u8);
+
+
 }
 
-fn initializeLLVM() -> LLVMContext
+pub fn initializeLLVM() -> LLVMContext
 {
     let c; let j; let f;
     unsafe{
@@ -23,11 +27,11 @@ fn initializeLLVM() -> LLVMContext
       f = create_IRBuilder(c);
   }
 
-  LLVMContext{context: c, kaleidoscope_jit:j, ir_builder: f}
+  LLVMContext{context: c, kaleidoscope_jit:j, ir_builder:f}
 
 }
 
-fn initializeLLVMModule(context: LLVMContext) -> LLVMModule
+pub fn initializeLLVMModule(context: &mut LLVMContext) -> LLVMModule
 {
     let m; let c;
     unsafe{
@@ -41,14 +45,24 @@ fn initializeLLVMModule(context: LLVMContext) -> LLVMModule
 
 }
 
+pub fn drop_value(val: &mut LLVMValue)
+{
+    let &mut LLVMValue(internal)=val;
+    unsafe{
+        extern_drop_value(internal);
+    }
+}
+
 
 pub fn generate_single_statement(operator: SingleOperators, dest: LLVMValue,source:LLVMValue) -> LLVMValue
 {
     panic!("unimplemnted");
 }
-pub fn generate_constant(val: u64, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
+pub fn generate_constant_val(context: &mut LLVMContext, val: u64) -> LLVMValue
 {
-    panic!("unimplemnted");
+    unsafe{
+        LLVMValue(generate_constant(context.context,val))
+    }
 }
 pub fn generate_function(val: LLVMValue, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
 {
@@ -58,6 +72,8 @@ pub fn load_array_cell(val: u8, context: &mut LLVMContext,module: &mut LLVMModul
 {
     panic!("unimplemnted");
 }
+
+
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,9 @@
-/*Copyright (c) 2015 Peter Marheine
+/*
+Original Author copyright follows, all code in the below file falls under
+the terms of the MIT licence as written below
+*/
+/*
+Copyright (c) 2015 Peter Marheine
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -16,7 +21,8 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.*/
+SOFTWARE.
+*/
 
 
 extern crate semver;
@@ -109,8 +115,9 @@ fn main() {
         .arg("src/cpp/kaleidoscope.cpp")
         .arg("-o")
         .arg("kaleidoscope.o");
-    clang_run.status()
-        .unwrap();
+    if !clang_run.status().unwrap().success(){
+        panic!("failed to generate c lib")
+    }
 
     Command::new("ar").args(&["crus", "libkaleidoscope.a", "kaleidoscope.o"])
             .status().unwrap();

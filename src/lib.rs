@@ -29,3 +29,11 @@ impl OperatorProvider for Kaleidoscope
 	fn random(&self,rng: &mut Rng) ->Operator {panic!("wut")}
 	fn random_with_successors(&self,rng: &mut Rng, suc: u8) -> Operator { panic!("wut")}
 }
+
+impl Kaleidoscope
+{
+    pub fn new()->Kaleidoscope
+    {
+        Kaleidoscope
+    }
+}
