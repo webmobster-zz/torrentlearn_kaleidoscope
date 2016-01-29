@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
+//FIXME: This file needs a cleanup
 extern crate semver;
 
 use semver::{Version, VersionReq};
@@ -44,10 +44,10 @@ fn llvm_config(arg: &str, addition_config:bool) -> String {
         .arg(arg)
         .output()
         .unwrap_or_else(|e| panic!("Couldn't execute llvm-config. Error: {}", e));
+
     let stderr = output.stderr;
     let string = String::from_utf8(stderr).ok().expect("llvm-config output was not UTF-8.");
     if string.len() > 0 {panic!("unexpected error messages from llvm config: {} \n with arg: {}", string, arg);}
-
     let stdout = output.stdout;
     let string = String::from_utf8(stdout).ok().expect("llvm-config output was not UTF-8.");
     return string;

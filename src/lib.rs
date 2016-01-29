@@ -9,7 +9,6 @@ extern crate torrentlearn_model;
 mod operator_compiler;
 mod parse;
 mod codegen;
-//TODO: Create folders if they dont exit
 
 #[derive(Debug)]
 enum CompileError

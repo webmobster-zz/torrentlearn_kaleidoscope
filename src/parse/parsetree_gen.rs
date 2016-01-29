@@ -6,8 +6,8 @@ use super::ReduceOperators;
 
 pub enum ParseTree
 {
-    ListStatement(Vec<Statement>,Vec<UUID>,UUID),
-    SomeStatement(Statement,UUID),
+    ListStatement(Vec<Statement>),
+    SomeStatement(Statement),
 }
 
 

@@ -52,31 +52,33 @@ pub fn drop_value(val: &mut LLVMValue)
         extern_drop_value(internal);
     }
 }
-
-
-pub fn generate_single_statement(operator: SingleOperators, dest: LLVMValue,source:LLVMValue) -> LLVMValue
-{
-    panic!("unimplemnted");
-}
 pub fn generate_constant_val(context: &mut LLVMContext, val: u64) -> LLVMValue
 {
     unsafe{
         LLVMValue(generate_constant(context.context,val))
     }
 }
-pub fn generate_function(val: LLVMValue, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
+pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
 {
-    panic!("unimplemnted");
+}
+pub fn finalize_function(val: LLVMValue, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
+{
 }
 pub fn load_array_cell(val: u8, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
 {
-    panic!("unimplemnted");
+}
+
+pub fn generate_single_statement(operator: SingleOperators, dest: LLVMValue,source:LLVMValue) -> LLVMValue
+{
 }
 
 
 
 #[cfg(test)]
 mod tests {
+
+    static Operators: [SingleOperators; 1] = [Add];
+    use parse::SingleOperators;
 
     #[test]
     fn null_and_sanity_checks_extern() {
