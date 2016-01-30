@@ -3,13 +3,20 @@ use super::SingleOperators;
 use super::VecOperators;
 use super::MapOperators;
 use super::ReduceOperators;
+use std::rc::Rc;
+use std::rc::Weak;
 
 pub enum ParseTree
 {
-    ListStatement(Vec<Statement>),
+    ListStatement(Statement,ParseTreeWrapper),
+    SplitStatement(Statement,ParseTreeWrapper,ParseTreeWrapper),
     SomeStatement(Statement),
 }
-
+enum ParseTreeWrapper
+{
+    Strong(Rc<ParseTree>),
+    Weak(Weak<ParseTree>)
+}
 
 pub enum Statement
 {

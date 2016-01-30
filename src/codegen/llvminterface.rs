@@ -1,7 +1,7 @@
 use super::LLVMValue;
 use super::LLVMContext;
 use super::LLVMModule;
-
+use std::slice::from_raw_parts_mut;
 use parse::SingleOperators;
 
 extern {
@@ -12,9 +12,19 @@ extern {
         pub fn initialize_module(context: *mut u8,jit: *mut u8)-> *mut u8;
         pub fn initialize_pass_manager(module: *mut u8)-> *mut u8;
         pub fn generate_constant(context: *mut u8, val: u64)-> *mut u8;
+        pub fn extern_generate_function_proto(context: *mut u8, module: *mut u8)-> FunctionProto;
+        pub fn extern_finalize_function(context: *mut u8,ir_builder: *mut u8,function: *mut u8)->*mut u8;
+        pub fn extern_load_array_cell(context: *mut u8,ir_builder: *mut u8,val: *mut u8, array: *mut u8)->*mut u8;
+
         pub fn extern_drop_value(value: *mut u8);
 
 
+}
+
+#[repr(C)]
+struct FunctionProto {
+    proto: *mut u8,
+    args: [*mut u8;10]
 }
 
 pub fn initializeLLVM() -> LLVMContext
@@ -58,14 +68,32 @@ pub fn generate_constant_val(context: &mut LLVMContext, val: u64) -> LLVMValue
         LLVMValue(generate_constant(context.context,val))
     }
 }
-pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
+pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule) -> (LLVMValue,Vec<LLVMValue>)
 {
+    unsafe
+    {
+        let proto: FunctionProto = extern_generate_function_proto(context.context, module.module);
+        let argument_vec = Vec::new();
+        for value in proto.args
+        {
+            argument_vec.push(LLVMValue(*value));
+        }
+        return (LLVMValue(proto.proto),argument_vec)
+    }
 }
 pub fn finalize_function(val: LLVMValue, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
 {
+    let LLVMValue(val)= val;
+    unsafe{
+        LLVMValue(extern_finalize_function(context.context,context.ir_builder,val))
+    }
 }
-pub fn load_array_cell(val: u8, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
+pub fn load_array_cell(val: u8, context: &mut LLVMContext,module: &mut LLVMModule, array: &mut LLVMValue) -> LLVMValue
 {
+    let &mut LLVMValue(array)= array;
+    unsafe{
+        LLVMValue(extern_load_array_cell(context.context,context.ir_builder,val,array))
+    }
 }
 
 pub fn generate_single_statement(operator: SingleOperators, dest: LLVMValue,source:LLVMValue) -> LLVMValue

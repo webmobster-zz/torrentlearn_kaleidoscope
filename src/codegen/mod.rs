@@ -64,11 +64,12 @@ pub struct FunctionContext
 impl Codegen for ParseTree {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
         match self {
-            &ListStatement(ref statements) => panic!("wut"),
+            &ListStatement(_,_) => panic!("wut"),
             &SomeStatement(ref statement) => {
-                let (function,args) = llvminterface::generate_function_proto(context,module);
-                let statement = statement.codegen(context,module,arg);
-                return llvminterface::finalize_function(context,module,statement);
+                let (function,arg_temp) = llvminterface::generate_function_proto(context,module);
+                let mut args = FunctionContext{ array: Some(arg_temp[0]) };
+                let statement = statement.codegen(context,module,&mut args);
+                return llvminterface::finalize_function(statement,context,module);
             }
         }
     }
@@ -88,7 +89,7 @@ impl Codegen for Statement {
 impl Codegen for Data {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
         match self {
-            &Val(val) => llvminterface::generate_constant_val(context,val,args),
+            &Val(val) => llvminterface::generate_constant_val(context,val),
             &Pos(ref position) => position.codegen(context,module,args)
         }
     }
@@ -96,8 +97,8 @@ impl Codegen for Data {
 impl Codegen for Position {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
         match self {
-            &ConstPos(val) => llvminterface::generate_constant_val(context,val,args),
-            &VarPos(val) => llvminterface::load_array_cell(val,context,module,args)
+            &ConstPos(val) => llvminterface::generate_constant_val(context,val),
+            &VarPos(val) => llvminterface::load_array_cell(val,context,module,args.array.as_mut().unwrap())
         }
     }
 }

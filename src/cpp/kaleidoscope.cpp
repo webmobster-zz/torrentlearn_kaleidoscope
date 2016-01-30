@@ -17,17 +17,21 @@
 using namespace llvm;
 using namespace llvm::orc;
 
+typedef struct FunctionProto_struct {
+    void* proto;
+    void* arg;
+    unsigned args_len;
+} FunctionProto;
+
+
 extern "C" void* get_global_context();
 extern "C" void* create_jit();
 extern "C" void* create_IRBuilder(void* context_void);
 extern "C" void* initialize_module(void* context_void, void* jit_void);
 extern "C" void* initialize_pass_manager(void* module_void);
 extern "C" void* generate_constant(void* context_void, uint64_t value);
-extern "C" void* test(void* context_void, void* ir_builder_void, uint64_t value);
 extern "C" void* extern_drop_value(void* value_void);
-
-
-
+extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void);
 
 
 void* get_global_context()
@@ -83,7 +87,10 @@ void* initialize_pass_manager(void* module_void)
 
     return (void*) fpm;
 }
-
+FunctionProto extern_generate_function_proto(void* context_void, void* module_void)
+{
+    
+}
 void* extern_drop_value(void* value_void)
 {
     Value *value = static_cast<Value*>(value_void);
