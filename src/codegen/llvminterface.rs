@@ -2,7 +2,7 @@ use super::LLVMValue;
 use super::LLVMContext;
 use super::LLVMModule;
 use std::slice::from_raw_parts_mut;
-use parse::SingleOperators;
+use torrentlearn_model::parse::SingleOperators;
 
 extern {
 
@@ -14,11 +14,9 @@ extern {
         pub fn generate_constant(context: *mut u8, val: u64)-> *mut u8;
         pub fn extern_generate_function_proto(context: *mut u8, module: *mut u8)-> FunctionProto;
         pub fn extern_finalize_function(context: *mut u8,ir_builder: *mut u8,function: *mut u8)->*mut u8;
-        pub fn extern_load_array_cell(context: *mut u8,ir_builder: *mut u8,val: *mut u8, array: *mut u8)->*mut u8;
+        pub fn extern_load_array_cell(context: *mut u8,ir_builder: *mut u8,val: u8, array: *mut u8)->*mut u8;
 
         pub fn extern_drop_value(value: *mut u8);
-
-
 }
 
 #[repr(C)]
@@ -73,8 +71,8 @@ pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule
     unsafe
     {
         let proto: FunctionProto = extern_generate_function_proto(context.context, module.module);
-        let argument_vec = Vec::new();
-        for value in proto.args
+        let mut argument_vec = Vec::new();
+        for value in proto.args.iter()
         {
             argument_vec.push(LLVMValue(*value));
         }
@@ -98,6 +96,7 @@ pub fn load_array_cell(val: u8, context: &mut LLVMContext,module: &mut LLVMModul
 
 pub fn generate_single_statement(operator: SingleOperators, dest: LLVMValue,source:LLVMValue) -> LLVMValue
 {
+    unimplemented!()
 }
 
 

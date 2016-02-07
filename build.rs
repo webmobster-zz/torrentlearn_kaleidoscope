@@ -24,23 +24,31 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+
 //FIXME: This file needs a cleanup
+#[cfg(feature = "build-c-libs")]
 extern crate semver;
 
+#[cfg(feature = "build-c-libs")]
 use semver::{Version, VersionReq};
+#[cfg(feature = "build-c-libs")]
 use std::process::Command;
+#[cfg(feature = "build-c-libs")]
 use std::env;
-use std::io::Write;
 
-const llvm_config_name : &'static str =  "llvm-config-3.8";
-const clang : &'static str =  "clang++-3.8";
-const llvm_config_additional: &'static str = "core mcjit native";
+#[cfg(feature = "build-c-libs")]
+const LLVM_CONFIG_NAME : &'static str =  "llvm-config-3.8";
+#[cfg(feature = "build-c-libs")]
+const CLANG : &'static str =  "clang++-3.8";
+#[cfg(feature = "build-c-libs")]
+const LLVM_CONFIG_ADDITIONAL: &'static str = "core mcjit native";
 
 
 /// Get the output from running `llvm-config` with the given argument.
+#[cfg(feature = "build-c-libs")]
 fn llvm_config(arg: &str, addition_config:bool) -> String {
-    let additional_config = if addition_config { llvm_config_additional} else {" "};
-    let output = Command::new(llvm_config_name)
+    let additional_config = if addition_config { LLVM_CONFIG_ADDITIONAL} else {" "};
+    let output = Command::new(LLVM_CONFIG_NAME)
         .arg(arg)
         .output()
         .unwrap_or_else(|e| panic!("Couldn't execute llvm-config. Error: {}", e));
@@ -55,6 +63,7 @@ fn llvm_config(arg: &str, addition_config:bool) -> String {
 }
 
 /// Get the LLVM version using llvm-config.
+#[cfg(feature = "build-c-libs")]
 fn llvm_version() -> Version {
     match Version::parse(&llvm_config("--version",false)) {
         // Ignore partial error; particularly constructs like '3.8.0svn' should be accepted,
@@ -64,6 +73,7 @@ fn llvm_version() -> Version {
     }
 }
 
+#[cfg(feature = "build-c-libs")]
 fn main() {
     // Check for LLVM 3.6 or greater.
     let minimum_llvm_version = VersionReq::parse(">=3.6").unwrap();
@@ -103,7 +113,7 @@ fn main() {
 
 
 
-    let mut clang_run = Command::new(clang);
+    let mut clang_run = Command::new(CLANG);
     for arg in cxxflags.split_whitespace()
     {
         clang_run.arg(arg);
@@ -124,5 +134,11 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}",  env::current_dir().as_ref().unwrap().to_str().unwrap());
     println!("cargo:rustc-link-lib=static=kaleidoscope");
+
+}
+
+#[cfg(not(feature = "build-c-libs"))]
+fn main()
+{
 
 }

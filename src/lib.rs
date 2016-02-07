@@ -7,7 +7,6 @@ extern crate rand;
 extern crate torrentlearn_model;
 
 mod operator_compiler;
-mod parse;
 mod codegen;
 
 #[derive(Debug)]
@@ -19,14 +18,14 @@ enum CompileError
 	SymbolError(String)
 }
 
-struct Kaleidoscope;
+pub struct Kaleidoscope;
 impl OperatorProvider for Kaleidoscope
 {
-	fn get_random(&self) -> Operator{panic!("wut")}
-	fn get_slice(&self) -> &[Operator] {panic!("wut")}
+	fn get_random(&self) -> Operator{unimplemented!()}
+	fn get_slice(&self) -> &[Operator] {unimplemented!()}
 	//dynamic dispatch as no paramitzed types in a trait
-	fn random(&self,rng: &mut Rng) ->Operator {panic!("wut")}
-	fn random_with_successors(&self,rng: &mut Rng, suc: u8) -> Operator { panic!("wut")}
+	fn random(&self,rng: &mut Rng) ->Operator {unimplemented!()}
+	fn random_with_successors(&self,rng: &mut Rng, suc: u8) -> Operator { unimplemented!()}
 }
 
 impl Kaleidoscope

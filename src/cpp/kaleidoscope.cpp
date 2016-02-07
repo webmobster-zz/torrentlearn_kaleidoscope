@@ -19,8 +19,7 @@ using namespace llvm::orc;
 
 typedef struct FunctionProto_struct {
     void* proto;
-    void* arg;
-    unsigned args_len;
+    void* args[10];
 } FunctionProto;
 
 
@@ -33,6 +32,17 @@ extern "C" void* generate_constant(void* context_void, uint64_t value);
 extern "C" void* extern_drop_value(void* value_void);
 extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void);
 
+
+/// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
+/// the function.  This is used for mutable variables etc.
+//FIXME: Using a different IR builder?
+static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
+                                          const std::string &VarName) {
+  IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
+                 TheFunction->getEntryBlock().begin());
+  return TmpB.CreateAlloca(Type::getDoubleTy(getGlobalContext()), 0,
+                           VarName.c_str());
+}
 
 void* get_global_context()
 {
@@ -89,8 +99,46 @@ void* initialize_pass_manager(void* module_void)
 }
 FunctionProto extern_generate_function_proto(void* context_void, void* module_void)
 {
-    
+    // Make the function type:  double(double,double) etc.
+    std::vector<Type *> Doubles(Args.size(),
+                              Type::getDoubleTy(getGlobalContext()));
+    FunctionType *FT =
+      FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
+
+    Function *F =
+      Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
+
+    // Set names for all arguments.
+    unsigned Idx = 0;
+    for (auto &Arg : F->args())
+        Arg.setName(Args[Idx++]);
+
+    //TODO: Check how the ir builder managers insert points
+    // Create a new basic block to start insertion into.
+    BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", TheFunction);
+    Builder.SetInsertPoint(BB);
+
+    // Record the function arguments in the NamedValues map.
+    NamedValues.clear();
+    for (auto &Arg : TheFunction->args())
+        NamedValues[Arg.getName()] = &Arg;
+    return F;
 }
+
+FunctionProto extern_finalize_function(void* fpm, void* body, void* funtion)
+{
+    Builder.CreateRet(RetVal);
+
+    // Validate the generated code, checking for consistency.
+    verifyFunction(*TheFunction);
+
+    // Run the optimizer on the function.
+    TheFPM->run(*TheFunction);
+
+    return TheFunction;
+
+}
+
 void* extern_drop_value(void* value_void)
 {
     Value *value = static_cast<Value*>(value_void);

@@ -1,22 +1,22 @@
-use super::parse::ParseTree;
-use super::parse::ParseTree::{SomeStatement,ListStatement};
-use super::parse::Statement;
-use super::parse::Statement::{SingleStatement,VecStatement,ReduceStatement,MapStatement};
-use super::parse::Data;
-use super::parse::Data::{Val,Pos};
-use super::parse::Position;
-use super::parse::Position::{ConstPos,VarPos};
+use torrentlearn_model::parse::ParseTree;
+use torrentlearn_model::parse::ParseTree::{EndSingle};
+use torrentlearn_model::parse::Statement;
+use torrentlearn_model::parse::Statement::{SingleStatement,VecStatement,ReduceStatement,MapStatement};
+use torrentlearn_model::parse::Data;
+use torrentlearn_model::parse::Data::{Val,Pos};
+use torrentlearn_model::parse::Position;
+use torrentlearn_model::parse::Position::{ConstPos,VarPos};
 
 
 pub mod llvminterface;
 
-const position_one:u8=0;
-const position_two:u8=1;
-const position_three:u8=2;
-const position_four:u8=3;
+const POSITION_ONE:u8=0;
+const POSITION_TWO:u8=1;
+const POSITION_THREE:u8=2;
+const POSITION_FOUR:u8=3;
 
 
-trait Codegen {
+pub trait Codegen {
     fn codegen(&self, context: &mut LLVMContext, module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue;
 }
 
@@ -32,45 +32,50 @@ pub struct LLVMValue(*mut u8);
 
 //Don't give send as compiling on multiple threads not supported
 pub struct LLVMContext{
-    context: *mut u8,
-    kaleidoscope_jit: *mut u8,
-    ir_builder: *mut u8
+    pub context: *mut u8,
+    pub kaleidoscope_jit: *mut u8,
+    pub ir_builder: *mut u8
 }
 
-/*impl Drop for LLVMContext{
+impl Drop for LLVMContext{
     fn drop(&mut self)
     {
         panic!("unimplemented")
     }
-}*/
+}
 
 pub struct LLVMModule{
-    module: *mut u8,
-    function_pass_analyzer: *mut u8
+    pub module: *mut u8,
+    pub function_pass_analyzer: *mut u8
+}
+impl LLVMModule {
+    pub fn with_context(context: &mut LLVMContext) -> LLVMModule
+    {
+        llvminterface::initializeLLVMModule(context)
+    }
 }
 
-/*impl Drop for LLVMModule{
+impl Drop for LLVMModule{
     fn drop(&mut self)
     {
         panic!("unimplemented")
     }
-}*/
+}
 
 pub struct FunctionContext
 {
-    array: Option<LLVMValue>
+    pub array: LLVMValue
 }
+
 
 impl Codegen for ParseTree {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
         match self {
-            &ListStatement(_,_) => panic!("wut"),
-            &SomeStatement(ref statement) => {
-                let (function,arg_temp) = llvminterface::generate_function_proto(context,module);
-                let mut args = FunctionContext{ array: Some(arg_temp[0]) };
-                let statement = statement.codegen(context,module,&mut args);
-                return llvminterface::finalize_function(statement,context,module);
+            &EndSingle(ref statement) => {
+                statement.codegen(context,module,args)
+
             }
+            _ => unimplemented!(),
         }
     }
 }
@@ -81,7 +86,7 @@ impl Codegen for Statement {
             &SingleStatement(ref operator,ref pos,ref data) =>{
                 llvminterface::generate_single_statement(*operator,pos.codegen(context,module,args),data.codegen(context,module,args))
             }
-            _ => panic!("unimplemented")
+            _ => unimplemented!(),
         }
     }
 }
@@ -98,7 +103,7 @@ impl Codegen for Position {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
         match self {
             &ConstPos(val) => llvminterface::generate_constant_val(context,val),
-            &VarPos(val) => llvminterface::load_array_cell(val,context,module,args.array.as_mut().unwrap())
+            &VarPos(val) => llvminterface::load_array_cell(val,context,module,&mut args.array)
         }
     }
 }
