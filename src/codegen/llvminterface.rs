@@ -1,7 +1,6 @@
 use super::LLVMValue;
 use super::LLVMContext;
 use super::LLVMModule;
-use std::slice::from_raw_parts_mut;
 use torrentlearn_model::parse::SingleOperators;
 
 extern {
@@ -15,17 +14,16 @@ extern {
         pub fn extern_generate_function_proto(context: *mut u8, module: *mut u8)-> FunctionProto;
         pub fn extern_finalize_function(context: *mut u8,ir_builder: *mut u8,function: *mut u8)->*mut u8;
         pub fn extern_load_array_cell(context: *mut u8,ir_builder: *mut u8,val: u8, array: *mut u8)->*mut u8;
-
-        pub fn extern_drop_value(value: *mut u8);
+        //pub fn extern_drop_value(value: *mut u8);
 }
 
 #[repr(C)]
-struct FunctionProto {
+pub struct FunctionProto {
     proto: *mut u8,
     args: [*mut u8;10]
 }
 
-pub fn initializeLLVM() -> LLVMContext
+pub fn initialize_llvm() -> LLVMContext
 {
     let c; let j; let f;
     unsafe{
@@ -39,7 +37,7 @@ pub fn initializeLLVM() -> LLVMContext
 
 }
 
-pub fn initializeLLVMModule(context: &mut LLVMContext) -> LLVMModule
+pub fn initialize_llvm_module(context: &mut LLVMContext) -> LLVMModule
 {
     let m; let c;
     unsafe{
@@ -53,13 +51,13 @@ pub fn initializeLLVMModule(context: &mut LLVMContext) -> LLVMModule
 
 }
 
-pub fn drop_value(val: &mut LLVMValue)
+/*pub fn drop_value(val: &mut LLVMValue)
 {
     let &mut LLVMValue(internal)=val;
     unsafe{
         extern_drop_value(internal);
     }
-}
+}*/
 pub fn generate_constant_val(context: &mut LLVMContext, val: u64) -> LLVMValue
 {
     unsafe{
@@ -79,14 +77,14 @@ pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule
         return (LLVMValue(proto.proto),argument_vec)
     }
 }
-pub fn finalize_function(val: LLVMValue, context: &mut LLVMContext,module: &mut LLVMModule) -> LLVMValue
+pub fn finalize_function(val: LLVMValue, context: &mut LLVMContext, _: &mut LLVMModule) -> LLVMValue
 {
     let LLVMValue(val)= val;
     unsafe{
         LLVMValue(extern_finalize_function(context.context,context.ir_builder,val))
     }
 }
-pub fn load_array_cell(val: u8, context: &mut LLVMContext,module: &mut LLVMModule, array: &mut LLVMValue) -> LLVMValue
+pub fn load_array_cell(context: &mut LLVMContext, _: &mut LLVMModule, array: &mut LLVMValue, val: u8) -> LLVMValue
 {
     let &mut LLVMValue(array)= array;
     unsafe{

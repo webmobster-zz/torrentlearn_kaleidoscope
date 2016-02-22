@@ -1,66 +1,39 @@
-use torrentlearn_model::UUID;
-use torrentlearn_model::GlobalState;
-use torrentlearn_model::LocalState;
 use torrentlearn_model::SpecialOperator;
 use torrentlearn_model::Operator;
-
+use torrentlearn_model::parse::AllOperators;
 use torrentlearn_model::parse::ParseTree;
-use codegen::{LLVMContext,LLVMModule,FunctionContext};
+use codegen::{LLVMContext,LLVMModule};
 use codegen::llvminterface;
-use codegen::Codegen;
-
-use std::fs::File;
-use std::path::Path;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::io::Read;
-use self::core::str::FromStr;
+use codegen;
+use std::sync::{Arc,Mutex};
 
 extern crate core;
 
 pub struct JitCompiler {
     context: LLVMContext,
-    current_module: Arc<Mutex<LLVMModule>>
-
+    current_module: Arc<Mutex<LLVMModule>>,
+    rotate_count: u16,
+    rotate_period: u16
 }
 
 impl JitCompiler {
-    fn new() -> JitCompiler {
-        unimplemented!();
+    pub fn new(rotate_period: u16) -> JitCompiler {
+        let mut context =llvminterface::initialize_llvm();
+        let module = Arc::new(Mutex::new(LLVMModule::with_context(&mut context)));
+        assert!(rotate_period!=0);
+        JitCompiler{context: context, current_module: module, rotate_period: rotate_period, rotate_count: 0}
     }
-    fn compile_operator(&mut self,operator: UnCompiledOperator,  store_for_mutation: bool) -> Operator {
-        unimplemented!();
+    //FIXME: Rotation logic isnt clear with the multiple modules
+    pub fn compile_operator(&mut self,mut parse_tree: ParseTree, base_cost_calculator: fn(&AllOperators)-> u64, combination_cost_calculator: fn(u64,u64)-> u64) -> Operator {
+        let (pointer, current_module) = codegen::compile(&mut self.context, &mut self.current_module, &mut parse_tree);
+        if self.rotate_count % self.rotate_period ==0 {
+            self.rotate_module()
+        }
+        self.rotate_count = (self.rotate_count % self.rotate_period) +1;
+        Operator{ special: SpecialOperator::None, successors: parse_tree.get_sucessors(),cost: parse_tree.calculate_cost(base_cost_calculator,combination_cost_calculator), op: pointer, parts: Some(Arc::new(parse_tree)), drop_helper: Some(current_module) }
     }
 
-    fn rotate_module(&mut self) {
+    pub fn rotate_module(&mut self) {
         self.current_module= Arc::new(Mutex::new(LLVMModule::with_context(&mut self.context)));
     }
-}
-
-fn generate_uuid()->UUID {
-    unimplemented!();
-}
-
-//Use the module to keep track of uses for removal and dropping
-fn compile(context: &mut LLVMContext, current_module: &mut Arc<Mutex<LLVMModule>>,parsetree: ParseTree) -> (fn(&mut LocalState) -> bool, Arc<Mutex<LLVMModule>>) {
-    let mut module = current_module.lock().unwrap();
-    let (function,mut arg_temp) = llvminterface::generate_function_proto(context,&mut module);
-    let mut args = FunctionContext{ array: arg_temp.remove(0) };
-    let statement = parsetree.codegen(context,&mut module,&mut args);
-    llvminterface::finalize_function(statement,context,&mut *module);
-    unimplemented!();
-    //let pointer = llvminterface::get_pointer(statement,context,&mut module);
-    //return (pointer,current_module.clone())
-
-}
-
-
-pub struct UnCompiledOperator
-{
-    parse_tree: ParseTree
-}
-
-pub trait Compiler
-{
-	fn compile(&self, ordered_code : Vec<String>, uuid: UUID) -> fn(&mut[u8]) -> bool;
 }

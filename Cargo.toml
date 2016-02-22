@@ -12,6 +12,11 @@ keywords = ["GP", "Genetic Programming", "Machine Learning", "ML"]
 license = "GPLv3"
 build = "build.rs"
 
+[features]
+default = []
+build-c-libs = []
+
+
 [dependencies]
 rand = "*"
 

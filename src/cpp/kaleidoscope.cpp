@@ -17,10 +17,13 @@
 using namespace llvm;
 using namespace llvm::orc;
 
-typedef struct FunctionProto_struct {
+typedef struct FunctionProto {
     void* proto;
     void* args[10];
 } FunctionProto;
+
+typedef bool (*FunctionPtr)(uint64_t);
+
 
 
 extern "C" void* get_global_context();
@@ -30,7 +33,8 @@ extern "C" void* initialize_module(void* context_void, void* jit_void);
 extern "C" void* initialize_pass_manager(void* module_void);
 extern "C" void* generate_constant(void* context_void, uint64_t value);
 extern "C" void* extern_drop_value(void* value_void);
-extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void);
+extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void,void* builder_void, char* name_c_str);
+
 
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
@@ -97,47 +101,77 @@ void* initialize_pass_manager(void* module_void)
 
     return (void*) fpm;
 }
-FunctionProto extern_generate_function_proto(void* context_void, void* module_void)
+FunctionProto extern_generate_function_proto(void* context_void, void* module_void,void* builder_void, char* name_c_str)
 {
-    // Make the function type:  double(double,double) etc.
-    std::vector<Type *> Doubles(Args.size(),
-                              Type::getDoubleTy(getGlobalContext()));
-    FunctionType *FT =
-      FunctionType::get(Type::getDoubleTy(getGlobalContext()), Doubles, false);
 
-    Function *F =
-      Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
+    LLVMContext *context = static_cast<LLVMContext*>(context_void);
+    Module *module = static_cast<Module*>(module_void);
+    IRBuilder<> *builder = static_cast<IRBuilder<>*>(builder_void);
+    std::string Name = name_c_str;
+
+    //FIXME: Make this more visible
+    // Make the function type:  double(double,double) etc.
+    std::vector<Type *> argument_list(1,
+                              Type::getInt64PtrTy(*context));
+    FunctionType *function_type =
+      FunctionType::get(Type::getInt1Ty(*context), argument_list, false);
+
+    Function *function =
+      Function::Create(function_type, Function::ExternalLinkage, Name, module);
 
     // Set names for all arguments.
+    //FIXME: Do we need this?
+    /*
     unsigned Idx = 0;
     for (auto &Arg : F->args())
         Arg.setName(Args[Idx++]);
+    */
 
-    //TODO: Check how the ir builder managers insert points
+    //TODO: Check how the ir builder managers insert points, make this less of a global thing that
+    //modifys multiple things
     // Create a new basic block to start insertion into.
-    BasicBlock *BB = BasicBlock::Create(getGlobalContext(), "entry", TheFunction);
-    Builder.SetInsertPoint(BB);
+    BasicBlock *BB = BasicBlock::Create(*context, "entry", function);
+    builder->SetInsertPoint(BB);
 
-    // Record the function arguments in the NamedValues map.
-    NamedValues.clear();
-    for (auto &Arg : TheFunction->args())
-        NamedValues[Arg.getName()] = &Arg;
-    return F;
+    void* args[10];
+    unsigned idx = 0;
+    for (Argument &Arg : function->args()) {
+        args[idx] = (void*) &Arg;
+        idx++;
+    }
+    FunctionProto function_proto_struct;
+    function_proto_struct = {(void*) function, args};
+    return function_proto_struct;
 }
 
-FunctionProto extern_finalize_function(void* fpm, void* body, void* funtion)
-{
-    Builder.CreateRet(RetVal);
+void extern_finalize_function(void* fpm_void, void* body_void, void* function_void) {
+    llvm::legacy::FunctionPassManager* fpm =  static_cast<IRBuilder<>*>(fpm_void);
+
+    IRBuilder<> *builder = static_cast<IRBuilder<>*>(builder_void);
+    Value *body = static_cast<Value*>(body_void);
+    Function *function_void = static_cast<Function*>(function_void);
+
+    builder.CreateRet(body);
 
     // Validate the generated code, checking for consistency.
-    verifyFunction(*TheFunction);
+    verifyFunction(*function);
 
     // Run the optimizer on the function.
-    TheFPM->run(*TheFunction);
-
-    return TheFunction;
+    fpm->run(*function);
+    TheJIT->addModule(std::move(TheModule));
+    return;
 
 }
+FunctionPtr extern_get_symbol(char* name) {
+    // Search the JIT for the __anon_expr symbol.
+     auto ExprSymbol = jit->findSymbol(name);
+     assert(ExprSymbol && "Function not found");
+
+     // Get the symbol's address and cast it to the right type (takes no
+     // arguments, returns a double) so we can call it as a native function.
+     return (FunctionPtr)(intptr_t)ExprSymbol.getAddress();
+}
+
 
 void* extern_drop_value(void* value_void)
 {

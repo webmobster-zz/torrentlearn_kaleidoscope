@@ -94,6 +94,7 @@ private:
       if (auto Sym = CompileLayer.findSymbolIn(H, Name, true))
         return Sym;
 
+    //TODO: Possibly remove this
     // If we can't find the symbol in the JIT, try looking in the host process.
     if (auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name))
       return JITSymbol(SymAddr, JITSymbolFlags::Exported);

@@ -6,7 +6,8 @@ use torrentlearn_model::parse::Data;
 use torrentlearn_model::parse::Data::{Val,Pos};
 use torrentlearn_model::parse::Position;
 use torrentlearn_model::parse::Position::{ConstPos,VarPos};
-
+use torrentlearn_model::operator::DropHelper;
+use std::sync::{Arc,Mutex};
 
 pub mod llvminterface;
 
@@ -15,9 +16,24 @@ const POSITION_TWO:u8=1;
 const POSITION_THREE:u8=2;
 const POSITION_FOUR:u8=3;
 
+//Use the module to keep track of uses for removal and dropping
+pub fn compile(context: &mut LLVMContext, current_module: &mut Arc<Mutex<LLVMModule>>,parsetree: &mut ParseTree) -> (fn(&mut [u8]) -> bool, Arc<Mutex<LLVMModule>>) {
+    let mut module = current_module.lock().unwrap();
+    let (function,mut arg_temp) = llvminterface::generate_function_proto(context,&mut module);
+    let mut args = FunctionContext{ array: arg_temp.remove(0) };
+    let statement = parsetree.codegen(context,&mut module,&mut args);
+    llvminterface::finalize_function(statement,context,&mut *module);
+    unimplemented!();
+    //let pointer = llvminterface::get_pointer(statement,context,&mut module);
+    //return (pointer,current_module.clone())
+
+}
 
 pub trait Codegen {
     fn codegen(&self, context: &mut LLVMContext, module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue;
+}
+pub trait ArgumentCodegen {
+    fn codegen(&self, context: &mut LLVMContext, module: &mut LLVMModule, args: &mut FunctionContext,argument_position:u8) -> LLVMValue;
 }
 
 //FIXME: Does this need a drop implementation (how to clean up this value)
@@ -51,7 +67,7 @@ pub struct LLVMModule{
 impl LLVMModule {
     pub fn with_context(context: &mut LLVMContext) -> LLVMModule
     {
-        llvminterface::initializeLLVMModule(context)
+        llvminterface::initialize_llvm_module(context)
     }
 }
 
@@ -61,6 +77,8 @@ impl Drop for LLVMModule{
         panic!("unimplemented")
     }
 }
+unsafe impl Send for LLVMModule{}
+impl DropHelper for LLVMModule{}
 
 pub struct FunctionContext
 {
@@ -74,7 +92,7 @@ impl Codegen for ParseTree {
             &EndSingle(ref statement) => {
                 statement.codegen(context,module,args)
 
-            }
+            },
             _ => unimplemented!(),
         }
     }
@@ -84,26 +102,29 @@ impl Codegen for Statement {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
         match self {
             &SingleStatement(ref operator,ref pos,ref data) =>{
-                llvminterface::generate_single_statement(*operator,pos.codegen(context,module,args),data.codegen(context,module,args))
+                llvminterface::generate_single_statement(*operator,pos.codegen(context,module,args,POSITION_ONE),data.codegen(context,module,args,POSITION_TWO))
             }
-            _ => unimplemented!(),
+            &VecStatement(_,_,_,_) => unimplemented!(),
+            &MapStatement(_,_,_,_) => unimplemented!(),
+            &ReduceStatement(_,_,_,_) => unimplemented!(),
+
         }
     }
 }
 
-impl Codegen for Data {
-    fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
+impl ArgumentCodegen for Data {
+    fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext, argument_position: u8) -> LLVMValue {
         match self {
             &Val(val) => llvminterface::generate_constant_val(context,val),
-            &Pos(ref position) => position.codegen(context,module,args)
+            &Pos(ref position) => position.codegen(context,module,args, argument_position)
         }
     }
 }
-impl Codegen for Position {
-    fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext) -> LLVMValue {
+impl ArgumentCodegen for Position {
+    fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut FunctionContext, argument_position: u8) -> LLVMValue {
         match self {
             &ConstPos(val) => llvminterface::generate_constant_val(context,val),
-            &VarPos(val) => llvminterface::load_array_cell(val,context,module,&mut args.array)
+            &VarPos => llvminterface::load_array_cell(context,module,&mut args.array,argument_position)
         }
     }
 }
