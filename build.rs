@@ -69,7 +69,7 @@ fn llvm_version() -> Version {
         // Ignore partial error; particularly constructs like '3.8.0svn' should be accepted,
         // despite being invalid semver.
         Ok(v) => v,
-        _ => panic!("Could not determine LLVM version from llvm-config."),
+        Err(_) => panic!("Could not determine LLVM version from llvm-config."),
     }
 }
 

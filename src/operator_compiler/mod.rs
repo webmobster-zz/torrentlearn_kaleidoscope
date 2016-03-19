@@ -25,8 +25,8 @@ impl JitCompiler {
     }
     //FIXME: Rotation logic isnt clear with the multiple modules
     pub fn compile_operator(&mut self,mut parse_tree: ParseTree, base_cost_calculator: fn(&AllOperators)-> u64, combination_cost_calculator: fn(u64,u64)-> u64) -> Operator {
-        let (pointer, current_module) = codegen::compile(&mut self.context, &mut self.current_module, &mut parse_tree);
-        if self.rotate_count % self.rotate_period ==0 {
+        let (pointer, current_module) = codegen::compile(&mut self.context, &mut self.current_module, &mut parse_tree).unwrap();
+        if self.rotate_count % self.rotate_period == 0 {
             self.rotate_module()
         }
         self.rotate_count = (self.rotate_count % self.rotate_period) +1;
