@@ -10,6 +10,8 @@ use torrentlearn_model::parse::AllOperators;
 
 extern crate rand;
 extern crate torrentlearn_model;
+#[macro_use]
+extern crate log;
 
 mod operator_compiler;
 mod codegen;

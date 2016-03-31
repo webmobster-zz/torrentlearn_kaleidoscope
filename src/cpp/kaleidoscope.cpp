@@ -24,8 +24,6 @@ typedef struct FunctionProto {
 
 typedef bool (*FunctionPtr)(uint64_t);
 
-
-
 extern "C" void* extern_get_global_context();
 extern "C" void* extern_create_jit();
 extern "C" void* extern_create_IRBuilder(void* context_void);
@@ -33,9 +31,13 @@ extern "C" void* extern_initialize_module(void* context_void, void* jit_void);
 extern "C" void* extern_initialize_pass_manager(void* module_void);
 extern "C" void* extern_generate_constant(void* context_void, uint64_t value);
 extern "C" void* extern_generate_end_pos(void* context_void,void* builder_void, void* array_void,uint64_t values);
-extern "C" void* extern_generate_cont_pos(void* context_void,void* builder_void, void* array_void, void* access_value_void);
+extern "C" void* extern_generate_cont_pos(void* builder_void, void* array_void, void* access_value_void);
 extern "C" void* extern_drop_value(void* value_void);
 extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void,void* builder_void, char* name_c_str);
+extern "C" void extern_add_module_to_jit(void* jit_void, void* module_void);
+extern "C" void* extern_finalize_function(void* jit_void, void* builder_void, void* fpm_void, void* body_void, void* function_void);
+extern "C" void extern_dump_module_ir(void* module_void);
+extern "C" FunctionPtr extern_get_symbol(void* jit_void, const char* name);
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
 /// the function.  This is used for mutable variables etc.
@@ -104,26 +106,25 @@ void* extern_generate_constant(void* context_void, uint64_t value) {
 void* extern_generate_end_pos(void* context_void,void* builder_void, void* array_void,uint64_t index) {
     IRBuilder<>* builder = static_cast<IRBuilder<>*>(builder_void);
     LLVMContext* context = static_cast<LLVMContext*>(context_void);
-    Value array = static_cast<Value*>(array_void);
+    Value* array = static_cast<Value*>(array_void);
     Value* indexList[1];
     indexList[0] = ConstantInt::get(*context, APInt(64,index));
-    return (void*) builder.CreateGEP(array, idxList);
+    return (void*) builder->CreateGEP(array, indexList);
 }
 void* extern_generate_cont_pos(void* builder_void, void* array_void, void* access_value_void) {
     IRBuilder<>* builder = static_cast<IRBuilder<>*>(builder_void);
-    LLVMContext* context = static_cast<LLVMContext*>(context_void);
-    Value array = static_cast<Value*>(array_void);
-    Value access_value_pointer = static_cast<Value*>(access_value_void);
-    Value* access_value = builder.CreateLoad(access_value_pointer)
+    Value* array = static_cast<Value*>(array_void);
+    Value* access_value_pointer = static_cast<Value*>(access_value_void);
+    Value* access_value = builder->CreateLoad(access_value_pointer);
     Value* indexList[1];
     indexList[0] = access_value;
-    return (void*) builder.CreateGEP(array, idxList);
+    return (void*) builder->CreateGEP(array, indexList);
 }
 FunctionProto extern_generate_function_proto(void* context_void, void* module_void,void* builder_void, char* name_c_str) {
     LLVMContext *context = static_cast<LLVMContext*>(context_void);
     Module *module = static_cast<Module*>(module_void);
     IRBuilder<> *builder = static_cast<IRBuilder<>*>(builder_void);
-    std::string Name = name_c_str;
+    std::string name = name_c_str;
 
     //FIXME: Make this more visible
     // Make the function type:  double(double,double) etc.
@@ -132,7 +133,7 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
     FunctionType *function_type =
       FunctionType::get(Type::getInt1Ty(*context), argument_list, false);
     Function *function =
-      Function::Create(function_type, Function::ExternalLinkage, Name, module);
+      Function::Create(function_type, Function::ExternalLinkage, name, module);
 
     // Set names for all arguments.
     //FIXME: Do we need this?
@@ -153,10 +154,10 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
     for (Argument &Arg : function->args()) {
 
         // Create an alloca for this variable.
-        AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+        AllocaInst *Alloca = CreateEntryBlockAlloca(function, Arg.getName());
 
         // Store the initial value into the alloca.
-        Builder.CreateStore(&Arg, Alloca);
+        builder->CreateStore(&Arg, Alloca);
         args[idx] = (void*) &Alloca;
         idx++;
     }
@@ -165,25 +166,33 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
     return function_proto_struct;
 }
 
-void extern_finalize_function(void* fpm_void, void* body_void, void* function_void) {
-    llvm::legacy::FunctionPassManager* fpm =  static_cast<IRBuilder<>*>(fpm_void);
-
+void* extern_finalize_function(void* jit_void, void* builder_void, void* fpm_void, void* body_void, void* function_void) {
+    llvm::legacy::FunctionPassManager* fpm =  static_cast<llvm::legacy::FunctionPassManager*>(fpm_void);
+    KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
     IRBuilder<> *builder = static_cast<IRBuilder<>*>(builder_void);
     Value *body = static_cast<Value*>(body_void);
-    Function *function_void = static_cast<Function*>(function_void);
+    Function *function = static_cast<Function*>(function_void);
 
-    builder.CreateRet(body);
+    builder->CreateRet(body);
 
     // Validate the generated code, checking for consistency.
     verifyFunction(*function);
-
     // Run the optimizer on the function.
     fpm->run(*function);
-    TheJIT->addModule(std::move(TheModule));
-    return;
 
+    return (void*) function;
 }
-FunctionPtr extern_get_symbol(const char* name) {
+
+void extern_add_module_to_jit(void* jit_void, void* module_void) {
+    KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
+    Module *module = static_cast<Module*>(module_void);
+    jit->addModule(module);
+    return;
+}
+
+FunctionPtr extern_get_symbol(void* jit_void, const char* name) {
+    KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
+
     // Search the JIT for the __anon_expr symbol.
      auto ExprSymbol = jit->findSymbol(name);
      assert(ExprSymbol && "Function not found");
@@ -191,6 +200,12 @@ FunctionPtr extern_get_symbol(const char* name) {
      // Get the symbol's address and cast it to the right type (takes no
      // arguments, returns a double) so we can call it as a native function.
      return (FunctionPtr)(intptr_t)ExprSymbol.getAddress();
+}
+
+void extern_dump_module_ir(void* module_void) {
+    Module *module = static_cast<Module*>(module_void);
+    module->dump();
+    return;
 }
 
 void* extern_drop_value(void* value_void)
