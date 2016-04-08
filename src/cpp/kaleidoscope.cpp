@@ -35,9 +35,15 @@ extern "C" void* extern_generate_cont_pos(void* builder_void, void* array_void, 
 extern "C" void* extern_drop_value(void* value_void);
 extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void,void* builder_void, char* name_c_str);
 extern "C" void extern_add_module_to_jit(void* jit_void, void* module_void);
-extern "C" void* extern_finalize_function(void* jit_void, void* builder_void, void* fpm_void, void* body_void, void* function_void);
+extern "C" void* extern_finalize_function(void* builder_void, void* fpm_void, void* body_void, void* function_void);
 extern "C" void extern_dump_module_ir(void* module_void);
 extern "C" FunctionPtr extern_get_symbol(void* jit_void, const char* name);
+
+//Instructions
+extern "C" void* extern_create_equals_statement(void* ir_builder_void, void* source_void, void* destination_void);
+
+
+
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
 /// the function.  This is used for mutable variables etc.
@@ -124,12 +130,12 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
     LLVMContext *context = static_cast<LLVMContext*>(context_void);
     Module *module = static_cast<Module*>(module_void);
     IRBuilder<> *builder = static_cast<IRBuilder<>*>(builder_void);
-    std::string name = name_c_str;
+    std::string name(name_c_str);
 
     //FIXME: Make this more visible
     // Make the function type:  double(double,double) etc.
     std::vector<Type *> argument_list(1,
-                              Type::getInt64PtrTy(*context));
+                              Type::getInt8PtrTy(*context));
     FunctionType *function_type =
       FunctionType::get(Type::getInt1Ty(*context), argument_list, false);
     Function *function =
@@ -149,30 +155,30 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
     BasicBlock *BB = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(BB);
 
-    void* args[10];
+    FunctionProto function_proto_struct;
     unsigned idx = 0;
     for (Argument &Arg : function->args()) {
-
+        /*
         // Create an alloca for this variable.
         AllocaInst *Alloca = CreateEntryBlockAlloca(function, Arg.getName());
 
         // Store the initial value into the alloca.
         builder->CreateStore(&Arg, Alloca);
+
         args[idx] = (void*) &Alloca;
+        */
+        function_proto_struct.args[idx] = (void*) &Arg;
         idx++;
     }
-    FunctionProto function_proto_struct;
-    function_proto_struct = {(void*) function, args};
+    function_proto_struct.proto = (void*) function;
     return function_proto_struct;
 }
 
-void* extern_finalize_function(void* jit_void, void* builder_void, void* fpm_void, void* body_void, void* function_void) {
+void* extern_finalize_function(void* builder_void, void* fpm_void, void* body_void, void* function_void) {
     llvm::legacy::FunctionPassManager* fpm =  static_cast<llvm::legacy::FunctionPassManager*>(fpm_void);
-    KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
     IRBuilder<> *builder = static_cast<IRBuilder<>*>(builder_void);
     Value *body = static_cast<Value*>(body_void);
     Function *function = static_cast<Function*>(function_void);
-
     builder->CreateRet(body);
 
     // Validate the generated code, checking for consistency.
@@ -190,11 +196,12 @@ void extern_add_module_to_jit(void* jit_void, void* module_void) {
     return;
 }
 
-FunctionPtr extern_get_symbol(void* jit_void, const char* name) {
+FunctionPtr extern_get_symbol(void* jit_void, const char* name_c_str) {
     KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
-
+    std::string name(name_c_str);
     // Search the JIT for the __anon_expr symbol.
      auto ExprSymbol = jit->findSymbol(name);
+
      assert(ExprSymbol && "Function not found");
 
      // Get the symbol's address and cast it to the right type (takes no
@@ -213,3 +220,14 @@ void* extern_drop_value(void* value_void)
     Value *value = static_cast<Value*>(value_void);
     delete value;
 }
+
+
+
+//Instructions start here
+ void* extern_create_equals_statement(void* builder_void, void* source_void, void* destination_void) {
+     IRBuilder<>* builder = static_cast<IRBuilder<>*>(builder_void);
+     Value* source = static_cast<Value*>(source_void);
+     Value* destination = static_cast<Value*>(destination_void);
+     return (void*) builder->CreateICmp(llvm::CmpInst::Predicate::ICMP_EQ,source,destination);
+
+ }

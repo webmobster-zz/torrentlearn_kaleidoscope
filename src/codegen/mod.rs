@@ -8,6 +8,7 @@ use torrentlearn_model::parse::Position;
 use torrentlearn_model::parse::Position::{ContPos,EndPos};
 use torrentlearn_model::operator::DropHelper;
 
+
 use std::ffi::NulError;
 
 #[derive(Debug)]
@@ -23,17 +24,17 @@ impl From<NulError> for CompileError {
 pub mod llvminterface;
 
 //Use the module to keep track of uses for removal and dropping
-pub fn compile(context: &mut LLVMContext, module: &mut LLVMModule,parsetree: &mut ParseTree, name: &str) -> Result<fn(&mut [u8]) -> bool,CompileError> {
+pub fn compile(context: &mut LLVMContext, module: &mut LLVMModule,parsetree: &mut ParseTree, name: &str) -> Result<fn(&mut [u64]) -> bool,CompileError> {
     let (function,mut arg_temp) = llvminterface::generate_function_proto(context,module,name);
     let mut args = arg_temp.remove(0);
     let statement = parsetree.codegen(context,module,&mut args);
-    llvminterface::finalize_function(statement,function,module);
+    llvminterface::finalize_function(statement,function,context,module);
 
     //FIXME: This assumes one function per module
     llvminterface::add_module_to_jit(context,module);
 
     //FIXME: Text
-    let pointer = try!(llvminterface::get_pointer("changeme"));
+    let pointer = try!(llvminterface::get_pointer(context,"changeme"));
     return Ok(pointer)
 
 }
@@ -63,7 +64,8 @@ pub struct LLVMContext{
 impl Drop for LLVMContext{
     fn drop(&mut self)
     {
-        panic!("unimplemented")
+        //FIXME
+        //panic!("unimplemented")
     }
 }
 
@@ -82,7 +84,8 @@ impl LLVMModule {
 impl Drop for LLVMModule{
     fn drop(&mut self)
     {
-        panic!("unimplemented")
+        //FIXME
+        //panic!("unimplemented")
     }
 }
 unsafe impl Send for LLVMModule{}
@@ -120,7 +123,9 @@ impl Codegen for Statement {
 impl Codegen for ConditionalStatement {
     fn codegen(&self, context: &mut LLVMContext,module: &mut LLVMModule, args: &mut LLVMValue) -> LLVMValue {
         let ConditionalStatement(ref operator,ref pos,ref data) = *self;
-        llvminterface::generate_conditional_statement(*operator,pos.codegen(context,module,args),data.codegen(context,module,args))
+        let dest = pos.codegen(context,module,args);
+        let source = data.codegen(context,module,args);
+        llvminterface::generate_conditional_statement(context,*operator,dest,source)
 
     }
 }
@@ -157,6 +162,8 @@ mod test{
         use torrentlearn_model::parse::ConditionalStatement;
         use torrentlearn_model::parse::Statement::{SingleStatement};
         use torrentlearn_model::parse::ConditionalOperators;
+        use std::mem;
+
 
 
         use std::u64;
@@ -180,7 +187,8 @@ mod test{
         }
         #[test]
         fn test_position() {
-            let array = [54;100];
+            let array: [u64;100] = [54;100];
+
             let test_val = Data::Val(54);
             let test = Position::EndPos(0);
             let test = Position::EndPos(10);
@@ -199,10 +207,10 @@ mod test{
             let (mut context,mut module) = startLLVM();
             let (mut function,mut arguments) = llvminterface::generate_function_proto(&mut context, &mut module,&test_name);
             let statement = ConditionalStatement(ConditionalOperators::Equals, test_value, expected_value).codegen(&mut context,&mut module,&mut arguments[0]);
-            llvminterface::finalize_function(statement,function,&mut module);
+            llvminterface::finalize_function(statement,function,&mut context, &mut module);
             llvminterface::add_module_to_jit(&mut context,&mut module);
             llvminterface::dump_module_ir(&mut module);
-            let function= llvminterface::get_pointer(&test_name).unwrap();
+            let function= llvminterface::get_pointer(&mut context,&test_name).unwrap();
             function(test_pattern)
         }
 
