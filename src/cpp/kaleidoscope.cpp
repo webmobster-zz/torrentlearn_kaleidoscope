@@ -115,7 +115,7 @@ void* extern_generate_end_pos(void* context_void,void* builder_void, void* array
     Value* array = static_cast<Value*>(array_void);
     Value* indexList[1];
     indexList[0] = ConstantInt::get(*context, APInt(64,index));
-    return (void*) builder->CreateGEP(array, indexList);
+    return (void*) builder->CreateLoad(builder->CreateGEP(array, indexList));
 }
 void* extern_generate_cont_pos(void* builder_void, void* array_void, void* access_value_void) {
     IRBuilder<>* builder = static_cast<IRBuilder<>*>(builder_void);
@@ -135,7 +135,7 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
     //FIXME: Make this more visible
     // Make the function type:  double(double,double) etc.
     std::vector<Type *> argument_list(1,
-                              Type::getInt8PtrTy(*context));
+                              Type::getInt64PtrTy(*context));
     FunctionType *function_type =
       FunctionType::get(Type::getInt1Ty(*context), argument_list, false);
     Function *function =

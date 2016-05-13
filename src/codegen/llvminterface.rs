@@ -1,6 +1,9 @@
 use super::LLVMValue;
 use super::LLVMContext;
+use super::LLVMJit;
+use super::LLVMIrBuilder;
 use super::LLVMModule;
+use super::LLVMFpm;
 use torrentlearn_model::parse::SingleOperators;
 use torrentlearn_model::parse::ConditionalOperators;
 use std::os::raw::c_char;
@@ -39,7 +42,7 @@ pub struct FunctionProto {
     proto: *mut u8,
     args: [*mut u8;10]
 }
-pub fn initialize_llvm() -> LLVMContext {
+pub fn initialize_llvm() -> (LLVMContext,LLVMJit,LLVMIrBuilder) {
     let c; let j; let f;
     unsafe{
         // Get the global LLVM context, jit and ir builder
@@ -47,42 +50,50 @@ pub fn initialize_llvm() -> LLVMContext {
       j = extern_create_jit();
       f = extern_create_IRBuilder(c);
   }
-  LLVMContext{context: c, kaleidoscope_jit:j, ir_builder:f}
+  (LLVMContext(c),LLVMJit(j),LLVMIrBuilder(f))
 }
 
-pub fn initialize_llvm_module(context: &mut LLVMContext) -> LLVMModule{
+pub fn initialize_llvm_module(context: &mut LLVMContext, jit: &mut LLVMJit) -> (LLVMModule,LLVMFpm) {
     let m; let c;
+    let &mut LLVMContext(context)= context; let &mut LLVMJit(jit)= jit;
     unsafe{
        // Create a new module for our function.
-       m = extern_initialize_module(context.context,context.kaleidoscope_jit);
+       m = extern_initialize_module(context,jit);
        c = extern_initialize_pass_manager(m);
    }
-   LLVMModule{module: m, function_pass_analyzer: c}
+   (LLVMModule(m), LLVMFpm(c))
 }
 pub fn generate_constant_val(context: &mut LLVMContext, val: u64) -> LLVMValue {
+    let &mut LLVMContext(context)= context;
     unsafe{
-        LLVMValue(extern_generate_constant(context.context,val))
+        LLVMValue(extern_generate_constant(context,val))
     }
 }
-pub fn generate_end_pos(context: &mut LLVMContext, array: &mut LLVMValue, position: u64) -> LLVMValue {
+pub fn generate_end_pos(context: &mut LLVMContext, ir_builder: &mut LLVMIrBuilder, array: &mut LLVMValue, position: u64) -> LLVMValue {
+    let &mut LLVMContext(context)= context;
+    let &mut LLVMIrBuilder(ir_builder)= ir_builder;
     unsafe{
         let &mut LLVMValue(array)= array;
-        LLVMValue(extern_generate_end_pos(context.context,context.ir_builder,array,position))
+        LLVMValue(extern_generate_end_pos(context,ir_builder,array,position))
     }
 }
-pub fn generate_cont_pos(context: &mut LLVMContext,array: &mut LLVMValue, index: LLVMValue) -> LLVMValue {
+pub fn generate_cont_pos(context: &mut LLVMContext, ir_builder: &mut LLVMIrBuilder, array: &mut LLVMValue, index: LLVMValue) -> LLVMValue {
+    let &mut LLVMIrBuilder(ir_builder)= ir_builder;
+    let &mut LLVMValue(array)= array;
+    let LLVMValue(index)= index;
     unsafe {
-        let &mut LLVMValue(array)= array;
-        let LLVMValue(index)= index;
-        LLVMValue(extern_generate_cont_pos(context.ir_builder,array,index))
+        LLVMValue(extern_generate_cont_pos(ir_builder,array,index))
     }
 }
 
-pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule,name: &str) -> (LLVMValue,Vec<LLVMValue>) {
+pub fn generate_function_proto(context: &mut LLVMContext, ir_builder: &mut LLVMIrBuilder, module: &mut LLVMModule,name: &str) -> (LLVMValue,Vec<LLVMValue>) {
+    let &mut LLVMContext(context)= context;
+    let &mut LLVMModule(module)= module;
+    let &mut LLVMIrBuilder(ir_builder)= ir_builder;
     unsafe {
         //FIXME
         let name = (CString::new(name).unwrap()).as_ptr();
-        let proto: FunctionProto = extern_generate_function_proto(context.context, module.module,context.ir_builder,name);
+        let proto: FunctionProto = extern_generate_function_proto(context, module,ir_builder,name);
         let mut argument_vec = Vec::new();
         for value in proto.args.iter() {
             argument_vec.push(LLVMValue(*value));
@@ -90,43 +101,50 @@ pub fn generate_function_proto(context: &mut LLVMContext,module: &mut LLVMModule
         return (LLVMValue(proto.proto),argument_vec)
     }
 }
-pub fn generate_conditional_statement(context: &mut LLVMContext, operator: ConditionalOperators, destination: LLVMValue,source:LLVMValue) -> LLVMValue {
+pub fn generate_conditional_statement(ir_builder: &mut LLVMIrBuilder, operator: ConditionalOperators, destination: LLVMValue,source:LLVMValue) -> LLVMValue {
     let LLVMValue(source)= source;
     let LLVMValue(destination)= destination;
+    let &mut LLVMIrBuilder(ir_builder)= ir_builder;
     unsafe {
         LLVMValue(match operator {
-            ConditionalOperators::Equals => extern_create_equals_statement(context.ir_builder,source,destination)
+            ConditionalOperators::Equals => extern_create_equals_statement(ir_builder,source,destination)
         })
     }
 }
 pub fn generate_single_statement(operator: SingleOperators, dest: LLVMValue,source:LLVMValue) -> LLVMValue {
     unimplemented!()
 }
-pub fn finalize_function(body: LLVMValue, function: LLVMValue,context: &mut LLVMContext, module: &mut LLVMModule) -> LLVMValue {
+pub fn finalize_function(body: LLVMValue, function: LLVMValue, ir_builder: &mut LLVMIrBuilder,  fpm: &mut LLVMFpm) -> LLVMValue {
     let LLVMValue(body)= body;
     let LLVMValue(function)= function;
+    let &mut LLVMIrBuilder(ir_builder)= ir_builder;
+    let &mut LLVMFpm(fpm)= fpm;
     unsafe{
-        LLVMValue(extern_finalize_function(context.ir_builder,module.function_pass_analyzer,body,function))
+        LLVMValue(extern_finalize_function(ir_builder,fpm,body,function))
     }
 }
-pub fn add_module_to_jit(context: &mut LLVMContext, module: &mut LLVMModule) {
+pub fn add_module_to_jit(jit: &mut LLVMJit, module: &mut LLVMModule) {
+    let &mut LLVMModule(module)= module;
+    let &mut LLVMJit(jit)= jit;
     unsafe{
-        extern_add_module_to_jit(context.kaleidoscope_jit,module.module)
+        extern_add_module_to_jit(jit,module)
     }
 }
 
 #[allow(dead_code)]
 //Used for debugging and tests
 pub fn dump_module_ir(module: &mut LLVMModule){
+    let &mut LLVMModule(module)= module;
     unsafe{
-        extern_dump_module_ir(module.module);
+        extern_dump_module_ir(module);
     }
 }
 
-pub fn get_pointer(context: &mut LLVMContext, name: &str) ->  Result<fn(&mut [u64]) -> bool,NulError>{
+pub fn get_pointer(jit: &mut LLVMJit, name: &str) ->  Result<fn(&mut [u64]) -> bool,NulError>{
+    let &mut LLVMJit(jit)= jit;
     unsafe{
         let name = (CString::new(name).unwrap()).as_ptr();
-        Ok(mem::transmute::<*mut u8,fn(&mut [u64]) -> bool>(extern_get_symbol(context.kaleidoscope_jit,name)))
+        Ok(mem::transmute::<*mut u8,fn(&mut [u64]) -> bool>(extern_get_symbol(jit,name)))
     }
 }
 
