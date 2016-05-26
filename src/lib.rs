@@ -13,6 +13,10 @@ extern crate torrentlearn_model;
 #[macro_use]
 extern crate log;
 
+#[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
+
 mod operator_compiler;
 mod codegen;
 

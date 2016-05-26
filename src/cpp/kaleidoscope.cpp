@@ -24,17 +24,27 @@ typedef struct FunctionProto {
 
 typedef bool (*FunctionPtr)(uint64_t);
 
+/* Function Signatures */
+
 extern "C" void* extern_get_global_context();
 extern "C" void* extern_create_jit();
 extern "C" void* extern_create_IRBuilder(void* context_void);
 extern "C" void* extern_initialize_module(void* context_void, void* jit_void);
 extern "C" void* extern_initialize_pass_manager(void* module_void);
+
+extern "C" void extern_drop_jit(void* jit_void);
+extern "C" void extern_drop_fpm(void* fpm_void);
+extern "C" void extern_drop_ir_builder(void* ir_builder_void);
+
+extern "C" void extern_drop_value(void* value_void);
+
 extern "C" void* extern_generate_constant(void* context_void, uint64_t value);
 extern "C" void* extern_generate_end_pos(void* context_void,void* builder_void, void* array_void,uint64_t values);
 extern "C" void* extern_generate_cont_pos(void* builder_void, void* array_void, void* access_value_void);
-extern "C" void* extern_drop_value(void* value_void);
 extern "C" FunctionProto extern_generate_function_proto(void* context_void, void* module_void,void* builder_void, char* name_c_str);
-extern "C" void extern_add_module_to_jit(void* jit_void, void* module_void);
+extern "C" unsigned extern_add_module_to_jit(void* jit_void, void* module_void);
+extern "C" void extern_remove_module_from_jit(void* jit_void, unsigned handle);
+
 extern "C" void* extern_finalize_function(void* builder_void, void* fpm_void, void* body_void, void* function_void);
 extern "C" void extern_dump_module_ir(void* module_void);
 extern "C" FunctionPtr extern_get_symbol(void* jit_void, const char* name);
@@ -43,7 +53,7 @@ extern "C" FunctionPtr extern_get_symbol(void* jit_void, const char* name);
 extern "C" void* extern_create_equals_statement(void* ir_builder_void, void* source_void, void* destination_void);
 
 
-
+/* Functions */
 
 /// CreateEntryBlockAlloca - Create an alloca instruction in the entry block of
 /// the function.  This is used for mutable variables etc.
@@ -56,6 +66,7 @@ static AllocaInst *CreateEntryBlockAlloca(Function *TheFunction,
                            VarName.c_str());
 }
 
+/* Constructors */
 void* extern_get_global_context() {
     return (void*) &getGlobalContext();
 }
@@ -67,6 +78,11 @@ void* extern_create_jit() {
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
+    if (!llvm::llvm_is_multithreaded()){
+        //TODO: Refactor into some kind of cross language error handling (strings?)
+        fprintf(stderr, "Couldn't locate llvm module handle, unrecoverable error, exiting\n");
+        exit(EXIT_FAILURE);
+    }
     KaleidoscopeJIT* jit = new KaleidoscopeJIT();
     return static_cast<void*>(jit);
 }
@@ -104,6 +120,32 @@ void* extern_initialize_pass_manager(void* module_void)
     fpm->doInitialization();
     return (void*) fpm;
 }
+
+/* Destructors */
+
+void extern_drop_jit(void* jit_void){
+    KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
+    delete jit;
+}
+
+void extern_drop_fpm(void* fpm_void){
+    llvm::legacy::FunctionPassManager* fpm = static_cast<llvm::legacy::FunctionPassManager*>(fpm_void);
+    delete fpm;
+
+}
+
+void extern_drop_ir_builder(void* ir_builder_void){
+    IRBuilder<>* builder = static_cast<IRBuilder<>*>(ir_builder_void);
+    delete builder;
+}
+
+void extern_drop_value(void* value_void)
+{
+    Value *value = static_cast<Value*>(value_void);
+    delete value;
+}
+
+/* General Codegen  */
 
 void* extern_generate_constant(void* context_void, uint64_t value) {
     LLVMContext* context = static_cast<LLVMContext*>(context_void);
@@ -149,8 +191,6 @@ FunctionProto extern_generate_function_proto(void* context_void, void* module_vo
         Arg.setName(Args[Idx++]);
     */
 
-    //TODO: Check how the ir builder managers insert points, make this less of a global thing that
-    //modifys multiple things
     // Create a new basic block to start insertion into.
     BasicBlock *BB = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(BB);
@@ -189,20 +229,25 @@ void* extern_finalize_function(void* builder_void, void* fpm_void, void* body_vo
     return (void*) function;
 }
 
-void extern_add_module_to_jit(void* jit_void, void* module_void) {
+unsigned extern_add_module_to_jit(void* jit_void, void* module_void) {
     KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
     Module *module = static_cast<Module*>(module_void);
-    jit->addModule(module);
+    auto handle= jit->addModule(module);
+    return handle;
+}
+
+void extern_remove_module_from_jit(void* jit_void, unsigned handle) {
+    KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
+    jit->removeModule(handle);
     return;
 }
+
 
 FunctionPtr extern_get_symbol(void* jit_void, const char* name_c_str) {
     KaleidoscopeJIT* jit =  static_cast<KaleidoscopeJIT*>(jit_void);
     std::string name(name_c_str);
     // Search the JIT for the __anon_expr symbol.
      auto ExprSymbol = jit->findSymbol(name);
-
-     assert(ExprSymbol && "Function not found");
 
      // Get the symbol's address and cast it to the right type (takes no
      // arguments, returns a double) so we can call it as a native function.
@@ -215,15 +260,12 @@ void extern_dump_module_ir(void* module_void) {
     return;
 }
 
-void* extern_drop_value(void* value_void)
-{
-    Value *value = static_cast<Value*>(value_void);
-    delete value;
-}
 
 
 
-//Instructions start here
+
+/* Instructions */
+
  void* extern_create_equals_statement(void* builder_void, void* source_void, void* destination_void) {
      IRBuilder<>* builder = static_cast<IRBuilder<>*>(builder_void);
      Value* source = static_cast<Value*>(source_void);

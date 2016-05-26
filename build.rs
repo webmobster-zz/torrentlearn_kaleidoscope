@@ -41,8 +41,8 @@ const LLVM_CONFIG_NAME : &'static str =  "llvm-config-3.8";
 #[cfg(feature = "build-c-libs")]
 const CLANG : &'static str =  "clang++-3.8";
 #[cfg(feature = "build-c-libs")]
-const LLVM_CONFIG_ADDITIONAL: &'static str = "core mcjit native";
-
+const LLVM_CONFIG_ADDITIONAL: &'static str = "";
+//core mcjit native
 
 /// Get the output from running `llvm-config` with the given argument.
 #[cfg(feature = "build-c-libs")]
@@ -120,6 +120,7 @@ fn main() {
     }
 
     clang_run
+        .arg("-std=c++11")
         .arg("-c")
         .arg("-O0")
         .arg("src/cpp/kaleidoscope.cpp")

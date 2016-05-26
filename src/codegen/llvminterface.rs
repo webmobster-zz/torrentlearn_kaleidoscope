@@ -3,6 +3,7 @@ use super::LLVMContext;
 use super::LLVMJit;
 use super::LLVMIrBuilder;
 use super::LLVMModule;
+use super::LLVMModuleHandle;
 use super::LLVMFpm;
 use torrentlearn_model::parse::SingleOperators;
 use torrentlearn_model::parse::ConditionalOperators;
@@ -11,7 +12,6 @@ use std::ffi::CString;
 use std::ffi::NulError;
 use std::mem;
 
-
 extern {
 
         pub fn extern_get_global_context() -> *mut u8;
@@ -19,37 +19,43 @@ extern {
         pub fn extern_create_IRBuilder(context: *mut u8) -> *mut u8;
         pub fn extern_initialize_module(context: *mut u8,jit: *mut u8)-> *mut u8;
         pub fn extern_initialize_pass_manager(module: *mut u8)-> *mut u8;
-        pub fn extern_generate_constant(context: *mut u8, val: u64)-> *mut u8;
 
+        pub fn extern_drop_jit(jit: *mut u8);
+        pub fn extern_drop_fpm(fpm: *mut u8);
+        pub fn extern_drop_ir_builder(ir_builder: *mut u8);
+
+        pub fn extern_generate_constant(context: *mut u8, val: u64)-> *mut u8;
         pub fn extern_generate_end_pos(context: *mut u8,builder: *mut u8, array: *mut u8, index: u64)-> *mut u8;
         pub fn extern_generate_cont_pos(builder: *mut u8, array: *mut u8, array_index_pointer: *mut u8)-> *mut u8;
-
         pub fn extern_generate_function_proto(context: *mut u8, module: *mut u8, builder: *mut u8, name: *const c_char)-> FunctionProto;
         pub fn extern_finalize_function(builder: *mut u8, fpm: *mut u8, function: *mut u8, body: *mut u8) -> *mut u8;
+
         pub fn extern_get_symbol(jit: *mut u8, name: *const c_char) -> *mut u8;
-        pub fn extern_add_module_to_jit(context: *mut u8,module: *mut u8);
+        pub fn extern_add_module_to_jit(context: *mut u8,module: *mut u8) -> usize;
+        pub fn extern_remove_module_from_jit(context: *mut u8,handle: usize);
         pub fn extern_dump_module_ir(module: *mut u8);
-
-
-        //pub fn extern_drop_value(value: *mut u8);
 
         //Operators
         pub fn extern_create_equals_statement(builder: *mut u8,source: *mut u8,destination: *mut u8) -> *mut u8;
 }
+
 
 #[repr(C)]
 pub struct FunctionProto {
     proto: *mut u8,
     args: [*mut u8;10]
 }
+
+/* Constructors */
 pub fn initialize_llvm() -> (LLVMContext,LLVMJit,LLVMIrBuilder) {
     let c; let j; let f;
     unsafe{
         // Get the global LLVM context, jit and ir builder
       c = extern_get_global_context();
-      j = extern_create_jit();
       f = extern_create_IRBuilder(c);
-  }
+
+       j = extern_create_jit();
+   }
   (LLVMContext(c),LLVMJit(j),LLVMIrBuilder(f))
 }
 
@@ -63,6 +69,28 @@ pub fn initialize_llvm_module(context: &mut LLVMContext, jit: &mut LLVMJit) -> (
    }
    (LLVMModule(m), LLVMFpm(c))
 }
+
+/* Destructors */
+pub fn drop_jit(jit: &mut LLVMJit){
+    let &mut LLVMJit(jit)= jit;
+    unsafe{
+        extern_drop_jit(jit)
+    }
+}
+pub fn drop_fpm(fpm: &mut LLVMFpm){
+    let &mut LLVMFpm(fpm)= fpm;
+    unsafe{
+        extern_drop_fpm(fpm)
+    }
+}
+pub fn drop_irbuilder(ir_builder: &mut LLVMIrBuilder){
+    let &mut LLVMIrBuilder(ir_builder)= ir_builder;
+    unsafe{
+        extern_drop_ir_builder(ir_builder)
+    }
+}
+
+/* Code Generators */
 pub fn generate_constant_val(context: &mut LLVMContext, val: u64) -> LLVMValue {
     let &mut LLVMContext(context)= context;
     unsafe{
@@ -90,16 +118,18 @@ pub fn generate_function_proto(context: &mut LLVMContext, ir_builder: &mut LLVMI
     let &mut LLVMContext(context)= context;
     let &mut LLVMModule(module)= module;
     let &mut LLVMIrBuilder(ir_builder)= ir_builder;
+    let proto: FunctionProto;
     unsafe {
         //FIXME
         let name = (CString::new(name).unwrap()).as_ptr();
-        let proto: FunctionProto = extern_generate_function_proto(context, module,ir_builder,name);
-        let mut argument_vec = Vec::new();
-        for value in proto.args.iter() {
-            argument_vec.push(LLVMValue(*value));
-        }
-        return (LLVMValue(proto.proto),argument_vec)
+        proto = extern_generate_function_proto(context, module,ir_builder,name);
+
     }
+    let mut argument_vec = Vec::new();
+    for value in proto.args.iter() {
+        argument_vec.push(LLVMValue(*value));
+    }
+    return (LLVMValue(proto.proto),argument_vec)
 }
 pub fn generate_conditional_statement(ir_builder: &mut LLVMIrBuilder, operator: ConditionalOperators, destination: LLVMValue,source:LLVMValue) -> LLVMValue {
     let LLVMValue(source)= source;
@@ -123,13 +153,31 @@ pub fn finalize_function(body: LLVMValue, function: LLVMValue, ir_builder: &mut 
         LLVMValue(extern_finalize_function(ir_builder,fpm,body,function))
     }
 }
-pub fn add_module_to_jit(jit: &mut LLVMJit, module: &mut LLVMModule) {
-    let &mut LLVMModule(module)= module;
+
+/* Other and Utils */
+
+//To keep with the same behaviour as the kalidoscope tutorial move the module into the JIT,
+//don't send a pointer to it
+pub fn add_module_to_jit(jit: &mut LLVMJit, module: LLVMModule) -> LLVMModuleHandle{
+    let LLVMModule(module_inner)= module;
+    //Don't let the module be cleaned up as we have invalidated the drop
+    mem::forget(module);
     let &mut LLVMJit(jit)= jit;
     unsafe{
-        extern_add_module_to_jit(jit,module)
+        return LLVMModuleHandle(extern_add_module_to_jit(jit,module_inner))
     }
 }
+
+pub fn remove_module_from_jit(jit: &mut LLVMJit, handle: LLVMModuleHandle) {
+    let LLVMModuleHandle(handle_inner)= handle;
+    //Don't let the handle be cleaned up as we have invalidated the drop
+    mem::forget(handle);
+    let &mut LLVMJit(jit)= jit;
+    unsafe{
+        extern_remove_module_from_jit(jit,handle_inner)
+    }
+}
+
 
 #[allow(dead_code)]
 //Used for debugging and tests
@@ -144,7 +192,8 @@ pub fn get_pointer(jit: &mut LLVMJit, name: &str) ->  Result<fn(&mut [u64]) -> b
     let &mut LLVMJit(jit)= jit;
     unsafe{
         let name = (CString::new(name).unwrap()).as_ptr();
-        Ok(mem::transmute::<*mut u8,fn(&mut [u64]) -> bool>(extern_get_symbol(jit,name)))
+        let symbol =extern_get_symbol(jit,name);
+        Ok(mem::transmute::<*mut u8,fn(&mut [u64]) -> bool>(symbol))
     }
 }
 

@@ -31,6 +31,9 @@ name = "torrentlearn_kaleidoscope"
 [build-dependencies]
 semver = "*"
 
+[dev-dependencies]
+lazy_static ="*"
+
 # The development profile, used for `cargo build`
 [profile.dev]
 opt-level = 0  # Controls the --opt-level the compiler builds with

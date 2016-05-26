@@ -22,6 +22,7 @@
 #include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include <unordered_map>
 
 namespace llvm {
 namespace orc {
@@ -40,7 +41,8 @@ public:
 
   TargetMachine &getTargetMachine() { return *TM; }
 
-  ModuleHandleT addModule(Module* M) {
+  //Following the logic in the tutorial this should be a unique handle to the module
+  unsigned addModule(Module* M) {
     // We need a memory manager to allocate memory and resolve symbols for this
     // new module. Create one that resolves symbols by looking back into the
     // JIT.
@@ -51,18 +53,23 @@ public:
           return RuntimeDyld::SymbolInfo(nullptr);
         },
         [](const std::string &S) { return nullptr; });
-    auto H = CompileLayer.addModuleSet(singletonSet(M),
+    auto H = CompileLayer.addModuleSet(singletonSet(std::move(M)),
                                        make_unique<SectionMemoryManager>(),
                                        std::move(Resolver));
-
-    ModuleHandles.push_back(H);
-    return H;
+    ModuleHandles[module_handle_count] = H;
+    module_handle_count++;
+    return module_handle_count-1;
   }
 
-  void removeModule(ModuleHandleT H) {
-    ModuleHandles.erase(
-        std::find(ModuleHandles.begin(), ModuleHandles.end(), H));
-    CompileLayer.removeModuleSet(H);
+  void removeModule(unsigned module_handle_key) {
+    if ( ModuleHandles.find(module_handle_key) == ModuleHandles.end()){
+        //TODO: Refactor into some kind of cross language error handling (strings?)
+        fprintf(stderr, "Couldn't locate llvm module handle, unrecoverable error, exiting\n");
+        exit(EXIT_FAILURE);
+    }
+    CompileLayer.removeModuleSet(ModuleHandles[module_handle_key]);
+    ModuleHandles.erase(module_handle_key);
+    return;
   }
 
   JITSymbol findSymbol(const std::string Name) {
@@ -87,26 +94,22 @@ private:
   }
 
   JITSymbol findMangledSymbol(const std::string &Name) {
-    // Search modules in reverse order: from last added to first added.
-    // This is the opposite of the usual search order for dlsym, but makes more
-    // sense in a REPL where we want to bind to the newest available definition.
-    for (auto H : make_range(ModuleHandles.rbegin(), ModuleHandles.rend()))
-      if (auto Sym = CompileLayer.findSymbolIn(H, Name, true))
-        return Sym;
-
-    //TODO: Possibly remove this
-    // If we can't find the symbol in the JIT, try looking in the host process.
-    if (auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name))
-      return JITSymbol(SymAddr, JITSymbolFlags::Exported);
-
-    return nullptr;
+    // Order of search is probably unecessary in this usecase, so we can use a map
+    for (auto  const &key_value : ModuleHandles){
+      if (auto Sym = CompileLayer.findSymbolIn(key_value.second, Name, true)){
+          return Sym;
+        }
+    }
+    fprintf(stderr, "Couldn't locate llvm function, unrecoverable error, exiting\n");
+    exit(EXIT_FAILURE);
   }
 
   std::unique_ptr<TargetMachine> TM;
   const DataLayout DL;
   ObjLayerT ObjectLayer;
   CompileLayerT CompileLayer;
-  std::vector<ModuleHandleT> ModuleHandles;
+  std::unordered_map<unsigned, ModuleHandleT> ModuleHandles;
+  unsigned module_handle_count = 0;
 };
 
 } // End namespace orc.
